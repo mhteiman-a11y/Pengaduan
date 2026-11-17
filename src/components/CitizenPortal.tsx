@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   CalendarCheck,
@@ -35,6 +35,8 @@ export function CitizenPortal() {
   const [serviceType, setServiceType] = useState('');
   const [description, setDescription] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const resultBannerRef = useRef<HTMLDivElement | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submittedTicket, setSubmittedTicket] = useState<{
@@ -62,7 +64,9 @@ export function CitizenPortal() {
       setServices(list);
       setServicesError(null);
       if (list.length > 0) {
-        setServiceType((prev) => prev || list[0].name);
+        setServiceType((prev) =>
+          prev && list.some((s) => s.name === prev) ? prev : list[0].name
+        );
       }
       if (!silent) {
         setServicesLoading(false);
@@ -155,6 +159,12 @@ export function CitizenPortal() {
 
   const selectedServiceMeta = services.find((s) => s.name === serviceType);
 
+  const scrollToFormResult = () => {
+    setTimeout(() => {
+      resultBannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 60);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
@@ -162,6 +172,13 @@ export function CitizenPortal() {
 
     if (!/^\d{16}$/.test(nik.trim())) {
       setSubmitError('NIK harus berisi tepat 16 digit angka sesuai KTP/KK.');
+      scrollToFormResult();
+      return;
+    }
+
+    if (!serviceType) {
+      setSubmitError('Daftar layanan belum dimuat. Klik "Muat Ulang Daftar" lalu pilih jenis layanan.');
+      scrollToFormResult();
       return;
     }
 
@@ -207,10 +224,15 @@ export function CitizenPortal() {
       });
       setDescription('');
       setFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      scrollToFormResult();
       await runTracking(created.ticketNumber);
       if (idToken) await fetchMyComplaints();
     } catch (err: any) {
       setSubmitError(err.message || 'Gagal memproses permohonan.');
+      scrollToFormResult();
     } finally {
       setSubmitting(false);
     }
@@ -620,12 +642,12 @@ export function CitizenPortal() {
             </div>
           </div>
 
-          <div className="lg:col-span-8 bg-white border border-slate-200 rounded-xl p-6 sm:p-8">
+          <div ref={resultBannerRef} className="lg:col-span-8 bg-white border border-slate-200 rounded-xl p-6 sm:p-8">
             {submittedTicket && (
               <div className="mb-6 p-5 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
                 <div className="flex items-center gap-2 text-emerald-900 font-semibold text-sm">
                   <CheckCircle2 className="w-5 h-5 text-emerald-700" />
-                  <span>Permohonan Berhasil Terdaftar di Sistem SIPPANDU</span>
+                  <span>Permohonan Berhasil Terdaftar di Sistem &amp; Masuk ke Antrean Verifikasi ASN</span>
                 </div>
                 <p className="text-sm text-emerald-800">
                   Nomor Tiket Anda:{' '}
@@ -634,8 +656,8 @@ export function CitizenPortal() {
                   </span>
                 </p>
                 <p className="text-xs text-emerald-800">
-                  Notifikasi konfirmasi telah dikirim melalui{' '}
-                  {submittedTicket.notificationsDispatched.join(' & ')}. Status tiket telah ditampilkan pada panel pelacakan di atas.
+                  Layanan: <span className="font-medium">{submittedTicket.serviceType}</span>. Notifikasi konfirmasi telah dikirim melalui{' '}
+                  {submittedTicket.notificationsDispatched.join(' & ')}. Status tiket telah ditampilkan pada panel pelacakan di atas dan otomatis masuk ke Antrean Verifikasi Portal ASN.
                 </p>
               </div>
             )}
@@ -662,9 +684,18 @@ export function CitizenPortal() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                    NIK (16 Digit) *
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-medium text-slate-700">
+                      NIK (16 Digit) *
+                    </label>
+                    <span
+                      className={`text-[11px] font-mono tabular-nums ${
+                        nik.length === 16 ? 'text-emerald-700 font-medium' : 'text-slate-400'
+                      }`}
+                    >
+                      {nik.length}/16 digit
+                    </span>
+                  </div>
                   <input
                     type="text"
                     required
@@ -771,6 +802,7 @@ export function CitizenPortal() {
                     Pilih File
                   </span>
                   <input
+                    ref={fileInputRef}
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png"
                     onChange={(e) => setFile(e.target.files?.[0] ?? null)}
@@ -779,13 +811,19 @@ export function CitizenPortal() {
                 </label>
               </div>
 
+              {submitError && (
+                <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800">
+                  {submitError}
+                </div>
+              )}
+
               <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <p className="text-xs text-slate-500">
                   Data dilindungi standar keamanan administrasi kependudukan Kabupaten Sidoarjo.
                 </p>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || servicesLoading || services.length === 0}
                   className="inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-[#0F294A] hover:bg-[#163A66] disabled:opacity-60 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <span>{submitting ? 'Mengirim Berkas...' : 'Kirim Permohonan'}</span>

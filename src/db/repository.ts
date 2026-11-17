@@ -410,22 +410,30 @@ export async function createComplaintSubmission(input: {
 
       if (existingByNik.length > 0 && existingByNik[0].id !== applicantId) {
         if (isStaffActor) {
-          // Staff testing/inputting for an existing citizen NIK: link to citizen record
+          // Staff testing/inputting for an existing NIK: link to that user without overwriting authenticated staff email
           applicantId = existingByNik[0].id;
-          await db
-            .update(users)
-            .set({
-              name: input.name.trim(),
-              phone: input.phone.trim(),
-              email: input.email.trim(),
-            })
-            .where(eq(users.id, applicantId));
+          if (!existingByNik[0].uid) {
+            await db
+              .update(users)
+              .set({
+                name: input.name.trim(),
+                phone: input.phone.trim(),
+                email: input.email.trim(),
+              })
+              .where(eq(users.id, applicantId));
+          } else {
+            await db
+              .update(users)
+              .set({
+                phone: input.phone.trim(),
+              })
+              .where(eq(users.id, applicantId));
+          }
         } else {
           // Citizen account submitting with a NIK already attached to another record: avoid unique crash
           await db
             .update(users)
             .set({
-              name: input.name.trim(),
               phone: input.phone.trim(),
             })
             .where(eq(users.id, applicantId));
@@ -452,23 +460,32 @@ export async function createComplaintSubmission(input: {
         await db
           .update(users)
           .set({
-            name: input.name.trim(),
             phone: input.phone.trim(),
             nik: cleanNik,
+            ...(isStaffActor ? {} : { name: input.name.trim() }),
           })
           .where(eq(users.id, applicantId));
       }
     } else {
       if (existingByNik.length > 0) {
         applicantId = existingByNik[0].id;
-        await db
-          .update(users)
-          .set({
-            name: input.name.trim(),
-            phone: input.phone.trim(),
-            email: input.email.trim(),
-          })
-          .where(eq(users.id, applicantId));
+        if (!existingByNik[0].uid) {
+          await db
+            .update(users)
+            .set({
+              name: input.name.trim(),
+              phone: input.phone.trim(),
+              email: input.email.trim(),
+            })
+            .where(eq(users.id, applicantId));
+        } else {
+          await db
+            .update(users)
+            .set({
+              phone: input.phone.trim(),
+            })
+            .where(eq(users.id, applicantId));
+        }
       } else {
         const citizenRole = await db
           .select()

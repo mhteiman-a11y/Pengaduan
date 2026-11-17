@@ -30,11 +30,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  const syncProfile = useCallback(async (user: FirebaseUser, forceRefresh = false) => {
+  const syncProfile = useCallback(async (user: FirebaseUser, forceRefresh = false, attempt = 0) => {
     try {
       let token = await user.getIdToken(forceRefresh);
       setIdToken(token);
       let res = await fetch('/api/me', {
+        cache: 'no-store',
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -42,8 +43,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         token = await user.getIdToken(true);
         setIdToken(token);
         res = await fetch('/api/me', {
+          cache: 'no-store',
           headers: { Authorization: `Bearer ${token}` },
         });
+      }
+
+      if (res.status >= 500 && attempt < 2) {
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        return syncProfile(user, forceRefresh, attempt + 1);
       }
 
       if (!res.ok) {
@@ -54,6 +61,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setDbUser(data.user);
       setAuthError(null);
     } catch (err: any) {
+      if (attempt < 2 && (!err?.message || err.message.includes('fetch'))) {
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        return syncProfile(user, forceRefresh, attempt + 1);
+      }
       console.error('Auth sync error:', err);
       setAuthError(err.message || 'Gagal menyinkronkan akun.');
       setDbUser(null);
@@ -112,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = await getFreshToken(false);
       let res = await fetch(input, {
         ...init,
+        cache: init.cache ?? 'no-store',
         headers: buildHeaders(token),
       });
 
@@ -119,6 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const refreshed = await getFreshToken(true);
         res = await fetch(input, {
           ...init,
+          cache: init.cache ?? 'no-store',
           headers: buildHeaders(refreshed),
         });
       }

@@ -68,6 +68,7 @@ app.get('/api/health', (_req, res) => {
 // Public: List active Dukcapil services & document requirements
 app.get('/api/services', async (_req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store');
     const list = await getPublicServiceTypes();
     res.json({ services: list });
   } catch (error: any) {
@@ -78,6 +79,7 @@ app.get('/api/services', async (_req, res) => {
 // Public: Self-service ticket or NIK tracking
 app.get('/api/public/track', async (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store');
     const q = String(req.query.q || '').trim();
     if (!q || q.length < 4) {
       return res.status(400).json({
@@ -150,6 +152,7 @@ app.get('/api/me', requireAuth, async (req: AuthRequest, res) => {
 
 app.get('/api/me/complaints', requireAuth, async (req: AuthRequest, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store');
     const items = await getComplaintsForUser(req.dbUser!.id);
     res.json({ complaints: items });
   } catch (error: any) {
@@ -185,6 +188,7 @@ app.get(
   requireFeature('portal_asn_queue'),
   async (req: AuthRequest, res) => {
     try {
+      res.setHeader('Cache-Control', 'no-store');
       const status = req.query.status ? String(req.query.status) : undefined;
       const search = req.query.search ? String(req.query.search) : undefined;
       const items = await getAdminComplaints({ status, search });

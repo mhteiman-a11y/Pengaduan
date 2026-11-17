@@ -241,7 +241,7 @@ export function AsnWorkspace({ onBackToCitizen }: AsnWorkspaceProps) {
       window.removeEventListener('focus', onFocus);
       clearInterval(timer);
     };
-  }, [dbUser?.id, idToken, canAccessQueue, activeTab, statusFilter]);
+  }, [dbUser?.id, canAccessQueue, activeTab, statusFilter]);
 
   useEffect(() => {
     if (dbUser && canAccessReports && activeTab === 'reports') fetchReport();
@@ -695,6 +695,17 @@ export function AsnWorkspace({ onBackToCitizen }: AsnWorkspaceProps) {
                             </div>
                             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-600">
                               <span className="truncate max-w-md">{c.serviceType}</span>
+                              <span className="text-slate-300" aria-hidden="true">·</span>
+                              <span className="font-mono text-[11px] text-slate-500 tabular-nums">
+                                Masuk:{' '}
+                                {new Date(c.createdAt).toLocaleString('id-ID', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </span>
                               {c.latestVerification?.bookingDate && (
                                 <>
                                   <span className="text-slate-300" aria-hidden="true">·</span>
