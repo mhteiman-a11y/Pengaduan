@@ -14,11 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { PublicTrackResult, ServiceType } from '../types/sippandu';
 import { StatusBadge } from './StatusBadge';
 
-interface CitizenPortalProps {
-  onOpenAsnPortal: () => void;
-}
-
-export function CitizenPortal({ onOpenAsnPortal }: CitizenPortalProps) {
+export function CitizenPortal() {
   const { dbUser, idToken, authFetch, getFreshToken } = useAuth();
   const [services, setServices] = useState<ServiceType[]>([]);
   const [servicesLoading, setServicesLoading] = useState(true);
@@ -242,13 +238,6 @@ export function CitizenPortal({ onOpenAsnPortal }: CitizenPortalProps) {
                   <Search className="w-4 h-4" />
                   <span>Lacak Status Tiket</span>
                 </a>
-                <button
-                  type="button"
-                  onClick={onOpenAsnPortal}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-700 hover:text-[#0F294A] underline-offset-4 hover:underline whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  <span>Ruang Kerja Verifikator ASN</span>
-                </button>
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                 <span>Mal Pelayanan Publik Sidoarjo</span>

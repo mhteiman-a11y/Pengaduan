@@ -116,14 +116,25 @@ export function AdminLoginGate({
 
           {showTargetSelector && dbUser && hasAccess && onSuccessTarget ? (
             <div className="pt-2 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => onSuccessTarget('asn')}
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#0F294A] hover:bg-[#163A66] rounded-lg cursor-pointer"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>Masuk ke Portal ASN</span>
-              </button>
+              {(dbUser.isPic ||
+                dbUser.allowedFeatures?.some((f) =>
+                  [
+                    'portal_asn_queue',
+                    'portal_asn_reports',
+                    'portal_asn_notifications',
+                    'portal_asn_master',
+                    'pic_access_control',
+                  ].includes(f)
+                )) && (
+                <button
+                  type="button"
+                  onClick={() => onSuccessTarget('asn')}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#0F294A] hover:bg-[#163A66] rounded-lg cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Masuk ke Portal ASN</span>
+                </button>
+              )}
               {(dbUser.isPic || dbUser.allowedFeatures?.includes('architecture_sql')) && (
                 <button
                   type="button"
