@@ -47,13 +47,13 @@ export function CitizenPortal() {
   const [myComplaints, setMyComplaints] = useState<any[]>([]);
   const [loadingMine, setLoadingMine] = useState(false);
 
-  const loadServices = async (attempt = 0) => {
-    if (attempt === 0) {
+  const loadServices = async (attempt = 0, silent = false) => {
+    if (attempt === 0 && !silent) {
       setServicesLoading(true);
       setServicesError(null);
     }
     try {
-      const res = await fetch('/api/services');
+      const res = await fetch('/api/services', { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error || 'Gagal memuat daftar layanan kependudukan.');
@@ -64,20 +64,27 @@ export function CitizenPortal() {
       if (list.length > 0) {
         setServiceType((prev) => prev || list[0].name);
       }
-      setServicesLoading(false);
+      if (!silent) {
+        setServicesLoading(false);
+      }
     } catch (err: any) {
       if (attempt < 2) {
-        setTimeout(() => loadServices(attempt + 1), 1500 * (attempt + 1));
+        setTimeout(() => loadServices(attempt + 1, silent), 1500 * (attempt + 1));
         return;
       }
-      setServices([]);
-      setServicesError(err?.message || 'Gagal memuat daftar layanan kependudukan.');
-      setServicesLoading(false);
+      if (!silent) {
+        setServices([]);
+        setServicesError(err?.message || 'Gagal memuat daftar layanan kependudukan.');
+        setServicesLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadServices(0);
+    loadServices(0, false);
+    const onFocus = () => loadServices(0, true);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, []);
 
   useEffect(() => {
@@ -316,27 +323,34 @@ export function CitizenPortal() {
           </div>
         ) : (
           <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {services.slice(0, 4).map((srv, idx) => (
-              <button
-                key={srv.id}
-                type="button"
-                onClick={() => {
-                  setServiceType(srv.name);
-                  document.getElementById('pengajuan')?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="text-left bg-white border border-slate-200 hover:border-[#0F294A] rounded-xl p-4 transition-colors cursor-pointer"
-              >
-                <div className="text-xs font-mono text-slate-500 tabular-nums">
-                  0{idx + 1} · SLA {srv.slaDays} Hari Kerja
-                </div>
-                <div className="mt-1.5 font-display font-semibold text-sm text-slate-900">
-                  {srv.name}
-                </div>
-                <p className="mt-1 text-xs text-slate-500 line-clamp-2">
-                  {srv.requiredDocs}
-                </p>
-              </button>
-            ))}
+            {services.map((srv, idx) => {
+              const isSelected = serviceType === srv.name;
+              return (
+                <button
+                  key={srv.id}
+                  type="button"
+                  onClick={() => {
+                    setServiceType(srv.name);
+                    document.getElementById('pengajuan')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className={`text-left rounded-xl p-4 border transition-colors cursor-pointer ${
+                    isSelected
+                      ? 'bg-slate-50 border-[#0F294A]'
+                      : 'bg-white border-slate-200 hover:border-[#0F294A]'
+                  }`}
+                >
+                  <div className="text-xs font-mono text-slate-500 tabular-nums">
+                    {String(idx + 1).padStart(2, '0')} · SLA {srv.slaDays} Hari Kerja
+                  </div>
+                  <div className="mt-1.5 font-display font-semibold text-sm text-slate-900">
+                    {srv.name}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500 line-clamp-2">
+                    {srv.requiredDocs}
+                  </p>
+                </button>
+              );
+            })}
           </div>
         )}
       </section>

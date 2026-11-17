@@ -263,6 +263,13 @@ export async function ensureBaseServiceTypes() {
               'KTP-el, Kartu Keluarga, Tangkap Layar Kendala Perbankan/BPJS',
             isActive: true,
           },
+          {
+            code: 'AKTA_KEMATIAN',
+            name: 'Penerbitan Akta Kematian',
+            slaDays: 3,
+            requiredDocs: 'KK, Surat Nikah, Surat Kematian RS/Desa, KTP-el',
+            isActive: true,
+          },
         ])
         .onConflictDoNothing();
     }
