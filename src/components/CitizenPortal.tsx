@@ -171,7 +171,12 @@ export function CitizenPortal() {
         formData.append('document', file);
       }
 
-      const freshToken = await getFreshToken();
+      let freshToken: string | null = null;
+      try {
+        freshToken = await getFreshToken();
+      } catch {
+        freshToken = null;
+      }
       const headers: Record<string, string> = {};
       if (freshToken) {
         headers.Authorization = `Bearer ${freshToken}`;
@@ -182,7 +187,7 @@ export function CitizenPortal() {
         headers,
         body: formData,
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error || 'Gagal mengirim permohonan.');
       }

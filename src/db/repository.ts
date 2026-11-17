@@ -209,8 +209,71 @@ export async function getOrCreateUserByFirebase(
   }
 }
 
+export async function ensureBaseServiceTypes() {
+  try {
+    const existing = await db.select({ id: serviceTypes.id }).from(serviceTypes).limit(1);
+    if (existing.length === 0) {
+      await db
+        .insert(serviceTypes)
+        .values([
+          {
+            code: 'KTP_EL',
+            name: 'Perekaman / Cetak Ulang KTP-el',
+            slaDays: 3,
+            requiredDocs:
+              'Kartu Keluarga (KK), Surat Kehilangan Kepolisian (jika hilang), atau KTP-el Rusak',
+            isActive: true,
+          },
+          {
+            code: 'KK_BARU',
+            name: 'Pembaruan / Penerbitan Kartu Keluarga (KK)',
+            slaDays: 2,
+            requiredDocs:
+              'KK Lama, Buku Nikah / Akta Perkawinan, Surat Pindah (jika pindah datang)',
+            isActive: true,
+          },
+          {
+            code: 'AKTA_LAHIR',
+            name: 'Penerbitan Akta Kelahiran',
+            slaDays: 3,
+            requiredDocs:
+              'Surat Keterangan Lahir RS/Bidan, KK Orang Tua, KTP-el Orang Tua, Buku Nikah',
+            isActive: true,
+          },
+          {
+            code: 'PINDAH_SKPWNI',
+            name: 'Surat Keterangan Pindah WNI (SKPWNI)',
+            slaDays: 2,
+            requiredDocs: 'KTP-el Asli, Kartu Keluarga, Formulir F-1.03',
+            isActive: true,
+          },
+          {
+            code: 'KIA',
+            name: 'Penerbitan Kartu Identitas Anak (KIA)',
+            slaDays: 2,
+            requiredDocs:
+              'Akta Kelahiran Anak, Kartu Keluarga, Pas Foto Anak (usia >= 5 tahun)',
+            isActive: true,
+          },
+          {
+            code: 'SINKRON_NIK',
+            name: 'Pengaduan Anomali / Sinkronisasi Data NIK',
+            slaDays: 1,
+            requiredDocs:
+              'KTP-el, Kartu Keluarga, Tangkap Layar Kendala Perbankan/BPJS',
+            isActive: true,
+          },
+        ])
+        .onConflictDoNothing();
+    }
+  } catch (error) {
+    console.error('Database query failed in ensureBaseServiceTypes:', error);
+  }
+}
+
 export async function getPublicServiceTypes() {
   try {
+    await ensureBaseServiceTypes();
     return await db
       .select()
       .from(serviceTypes)
@@ -224,6 +287,7 @@ export async function getPublicServiceTypes() {
 
 export async function getAllServiceTypes() {
   try {
+    await ensureBaseServiceTypes();
     return await db.select().from(serviceTypes).orderBy(serviceTypes.id);
   } catch (error) {
     console.error('Database query failed in getAllServiceTypes:', error);
@@ -651,7 +715,7 @@ export async function getAdminComplaints(filters?: {
       .from(complaints)
       .leftJoin(users, eq(complaints.userId, users.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(complaints.createdAt));
+      .orderBy(desc(complaints.createdAt), desc(complaints.id));
 
     return await Promise.all(
       rows.map(async (row) => {

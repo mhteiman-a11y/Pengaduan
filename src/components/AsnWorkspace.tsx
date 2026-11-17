@@ -140,10 +140,10 @@ export function AsnWorkspace({ onBackToCitizen }: AsnWorkspaceProps) {
 
   const fetchQueue = async (
     attempt = 0,
-    overrides?: { status?: string; search?: string }
+    overrides?: { status?: string; search?: string; silent?: boolean }
   ) => {
     if (!dbUser || !canAccessQueue) return;
-    if (attempt === 0) {
+    if (attempt === 0 && !overrides?.silent) {
       setQueueLoading(true);
       setQueueError(null);
     }
@@ -167,14 +167,18 @@ export function AsnWorkspace({ onBackToCitizen }: AsnWorkspaceProps) {
         );
         if (updatedSel) setSelectedComplaint(updatedSel);
       }
-      setQueueLoading(false);
+      if (!overrides?.silent) {
+        setQueueLoading(false);
+      }
     } catch (err: any) {
       if (attempt < 2) {
         setTimeout(() => fetchQueue(attempt + 1, overrides), 1500 * (attempt + 1));
         return;
       }
-      setQueueError(err.message || 'Gagal memuat antrean permohonan.');
-      setQueueLoading(false);
+      if (!overrides?.silent) {
+        setQueueError(err.message || 'Gagal memuat antrean permohonan.');
+        setQueueLoading(false);
+      }
     }
   };
 
@@ -228,9 +232,15 @@ export function AsnWorkspace({ onBackToCitizen }: AsnWorkspaceProps) {
   };
 
   useEffect(() => {
-    if (dbUser && canAccessQueue && activeTab === 'queue') {
-      fetchQueue(0);
-    }
+    if (!dbUser || !canAccessQueue || activeTab !== 'queue') return;
+    fetchQueue(0);
+    const onFocus = () => fetchQueue(0, { silent: true });
+    window.addEventListener('focus', onFocus);
+    const timer = setInterval(() => fetchQueue(0, { silent: true }), 15000);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      clearInterval(timer);
+    };
   }, [dbUser?.id, idToken, canAccessQueue, activeTab, statusFilter]);
 
   useEffect(() => {
