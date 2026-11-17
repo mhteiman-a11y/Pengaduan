@@ -157,11 +157,10 @@ app.get('/api/me/complaints', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
-// Secure Upload Download & Preview (ASN Verifier / Admin / Viewer with queue feature)
+// Secure Upload Download & Preview (PIC / authorized queue staff)
 app.get(
   '/api/uploads/:filename',
   requireAuth,
-  requireRole(['verifier', 'admin', 'viewer']),
   requireFeature('portal_asn_queue'),
   (req, res) => {
     const safeFile = path.basename(req.params.filename);
@@ -183,7 +182,6 @@ app.get(
 app.get(
   '/api/admin/complaints',
   requireAuth,
-  requireRole(['verifier', 'admin', 'viewer']),
   requireFeature('portal_asn_queue'),
   async (req: AuthRequest, res) => {
     try {
@@ -201,10 +199,14 @@ app.get(
 app.post(
   '/api/admin/verify',
   requireAuth,
-  requireRole(['verifier', 'admin']),
   requireFeature('portal_asn_queue'),
   async (req: AuthRequest, res) => {
     try {
+      if (!req.dbUser?.isPic && req.dbUser?.roleCode === 'viewer') {
+        return res.status(403).json({
+          error: 'Akun Pimpinan / Viewer hanya memiliki akses baca dan tidak dapat memverifikasi berkas.',
+        });
+      }
       const { complaintId, action, reason, bookingDate } = req.body;
       const allowedActions = ['IN_REVIEW', 'ACCEPTED', 'REJECTED', 'COMPLETED'];
 
@@ -243,7 +245,6 @@ app.post(
 app.get(
   '/api/admin/reports',
   requireAuth,
-  requireRole(['verifier', 'admin', 'viewer']),
   requireFeature('portal_asn_reports'),
   async (req: AuthRequest, res) => {
     try {
@@ -272,7 +273,6 @@ app.get(
 app.get(
   '/api/admin/reports/export',
   requireAuth,
-  requireRole(['verifier', 'admin', 'viewer']),
   requireFeature('portal_asn_reports'),
   async (req: AuthRequest, res) => {
     try {
@@ -334,7 +334,6 @@ app.get(
 app.get(
   '/api/admin/notifications',
   requireAuth,
-  requireRole(['verifier', 'admin', 'viewer']),
   requireFeature('portal_asn_notifications'),
   async (_req, res) => {
     try {

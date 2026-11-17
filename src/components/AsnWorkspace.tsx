@@ -138,33 +138,48 @@ export function AsnWorkspace({ onBackToCitizen }: AsnWorkspaceProps) {
     canAccessPic,
   ]);
 
-  const fetchQueue = async () => {
-    if (!idToken || !canAccessQueue) return;
-    setQueueLoading(true);
-    setQueueError(null);
+  const fetchQueue = async (
+    attempt = 0,
+    overrides?: { status?: string; search?: string }
+  ) => {
+    if (!dbUser || !canAccessQueue) return;
+    if (attempt === 0) {
+      setQueueLoading(true);
+      setQueueError(null);
+    }
     try {
+      const effectiveStatus = overrides?.status ?? statusFilter;
+      const effectiveSearch = overrides?.search ?? searchTerm;
       const params = new URLSearchParams();
-      if (statusFilter !== 'ALL') params.set('status', statusFilter);
-      if (searchTerm.trim()) params.set('search', searchTerm.trim());
+      if (effectiveStatus !== 'ALL') params.set('status', effectiveStatus);
+      if (effectiveSearch.trim()) params.set('search', effectiveSearch.trim());
       const res = await authFetch(`/api/admin/complaints?${params.toString()}`);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Gagal memuat antrean.');
-      setComplaints(data.complaints || []);
+      const list: AdminComplaint[] = Array.isArray(data.complaints)
+        ? data.complaints
+        : [];
+      setComplaints(list);
+      setQueueError(null);
       if (selectedComplaint) {
-        const updatedSel = (data.complaints || []).find(
+        const updatedSel = list.find(
           (c: AdminComplaint) => c.id === selectedComplaint.id
         );
         if (updatedSel) setSelectedComplaint(updatedSel);
       }
+      setQueueLoading(false);
     } catch (err: any) {
-      setQueueError(err.message);
-    } finally {
+      if (attempt < 2) {
+        setTimeout(() => fetchQueue(attempt + 1, overrides), 1500 * (attempt + 1));
+        return;
+      }
+      setQueueError(err.message || 'Gagal memuat antrean permohonan.');
       setQueueLoading(false);
     }
   };
 
   const fetchReport = async () => {
-    if (!idToken || !canAccessReports) return;
+    if (!dbUser || !canAccessReports) return;
     setReportLoading(true);
     try {
       const params = new URLSearchParams({
@@ -174,7 +189,7 @@ export function AsnWorkspace({ onBackToCitizen }: AsnWorkspaceProps) {
       });
       const res = await authFetch(`/api/admin/reports?${params.toString()}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         setReport(data.report);
       }
     } finally {
@@ -183,12 +198,12 @@ export function AsnWorkspace({ onBackToCitizen }: AsnWorkspaceProps) {
   };
 
   const fetchNotifications = async () => {
-    if (!idToken || !canAccessNotifications) return;
+    if (!dbUser || !canAccessNotifications) return;
     setNotifLoading(true);
     try {
       const res = await authFetch('/api/admin/notifications');
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         setNotifLogs(data.notifications || []);
       }
     } finally {
@@ -197,36 +212,38 @@ export function AsnWorkspace({ onBackToCitizen }: AsnWorkspaceProps) {
   };
 
   const fetchMasterAndServices = async () => {
-    if (!idToken || !canAccessMaster) return;
+    if (!dbUser || !canAccessMaster) return;
     const [sRes, aRes] = await Promise.all([
       authFetch('/api/admin/services'),
       authFetch('/api/admin/audit-logs'),
     ]);
     if (sRes.ok) {
-      const sData = await sRes.json();
+      const sData = await sRes.json().catch(() => ({}));
       setMasterServices(sData.services || []);
     }
     if (aRes.ok) {
-      const aData = await aRes.json();
+      const aData = await aRes.json().catch(() => ({}));
       setAuditLogs(aData.auditLogs || []);
     }
   };
 
   useEffect(() => {
-    if (canAccessQueue && activeTab === 'queue') fetchQueue();
-  }, [idToken, canAccessQueue, activeTab, statusFilter]);
+    if (dbUser && canAccessQueue && activeTab === 'queue') {
+      fetchQueue(0);
+    }
+  }, [dbUser?.id, idToken, canAccessQueue, activeTab, statusFilter]);
 
   useEffect(() => {
-    if (canAccessReports && activeTab === 'reports') fetchReport();
-  }, [idToken, canAccessReports, activeTab, periodType, reportYear, periodValue]);
+    if (dbUser && canAccessReports && activeTab === 'reports') fetchReport();
+  }, [dbUser?.id, idToken, canAccessReports, activeTab, periodType, reportYear, periodValue]);
 
   useEffect(() => {
-    if (canAccessNotifications && activeTab === 'notifications') fetchNotifications();
-  }, [idToken, canAccessNotifications, activeTab]);
+    if (dbUser && canAccessNotifications && activeTab === 'notifications') fetchNotifications();
+  }, [dbUser?.id, idToken, canAccessNotifications, activeTab]);
 
   useEffect(() => {
-    if (canAccessMaster && activeTab === 'master') fetchMasterAndServices();
-  }, [idToken, canAccessMaster, activeTab]);
+    if (dbUser && canAccessMaster && activeTab === 'master') fetchMasterAndServices();
+  }, [dbUser?.id, idToken, canAccessMaster, activeTab]);
 
   const handleVerifySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -527,15 +544,20 @@ export function AsnWorkspace({ onBackToCitizen }: AsnWorkspaceProps) {
                     </p>
                     <h2 className="font-display text-xl font-bold text-slate-900 mt-0.5">
                       Daftar Permohonan &amp; Pengaduan Masuk
+                      {!queueLoading && (
+                        <span className="ml-2 font-mono text-sm font-normal text-slate-500 tabular-nums">
+                          ({complaints.length})
+                        </span>
+                      )}
                     </h2>
                   </div>
 
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      fetchQueue();
+                      fetchQueue(0);
                     }}
-                    className="flex items-center gap-2"
+                    className="flex flex-wrap items-center gap-2"
                   >
                     <div className="relative">
                       <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -552,6 +574,14 @@ export function AsnWorkspace({ onBackToCitizen }: AsnWorkspaceProps) {
                       className="px-3.5 py-2 text-xs font-medium text-white bg-[#0F294A] hover:bg-[#163A66] rounded-lg cursor-pointer whitespace-nowrap"
                     >
                       Cari
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fetchQueue(0)}
+                      disabled={queueLoading}
+                      className="px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 disabled:opacity-60 rounded-lg cursor-pointer whitespace-nowrap"
+                    >
+                      {queueLoading ? 'Memuat...' : 'Muat Ulang'}
                     </button>
                   </form>
                 </div>
@@ -582,8 +612,15 @@ export function AsnWorkspace({ onBackToCitizen }: AsnWorkspaceProps) {
                 </div>
 
                 {queueError && (
-                  <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800">
-                    {queueError}
+                  <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span>{queueError}</span>
+                    <button
+                      type="button"
+                      onClick={() => fetchQueue(0)}
+                      className="px-3 py-1 text-xs font-medium text-red-900 bg-red-100 hover:bg-red-200 rounded cursor-pointer whitespace-nowrap self-start sm:self-auto"
+                    >
+                      Coba Muat Ulang
+                    </button>
                   </div>
                 )}
 
@@ -593,8 +630,23 @@ export function AsnWorkspace({ onBackToCitizen }: AsnWorkspaceProps) {
                       Memuat antrean verifikasi dari PostgreSQL...
                     </div>
                   ) : complaints.length === 0 ? (
-                    <div className="py-10 text-center text-sm text-slate-500">
-                      Tidak ada permohonan yang cocok dengan filter saat ini.
+                    <div className="py-10 text-center space-y-3">
+                      <p className="text-sm text-slate-500">
+                        Tidak ada permohonan yang cocok dengan filter saat ini.
+                      </p>
+                      {(statusFilter !== 'ALL' || searchTerm.trim()) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStatusFilter('ALL');
+                            setSearchTerm('');
+                            fetchQueue(0, { status: 'ALL', search: '' });
+                          }}
+                          className="px-3.5 py-1.5 text-xs font-medium text-[#0F294A] bg-slate-100 hover:bg-slate-200 rounded-md cursor-pointer"
+                        >
+                          Tampilkan Semua Permohonan
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-200 border-t border-slate-200">

@@ -316,23 +316,78 @@ export async function createComplaintSubmission(input: {
     await ensureBaseRoles();
 
     let applicantId = input.authUserId;
+    const cleanNik = input.nik.trim();
+
+    const existingByNik = await db
+      .select()
+      .from(users)
+      .where(eq(users.nik, cleanNik))
+      .limit(1);
 
     if (applicantId) {
-      await db
-        .update(users)
-        .set({
-          name: input.name.trim(),
-          phone: input.phone.trim(),
-          nik: input.nik.trim(),
+      const authRows = await db
+        .select({
+          id: users.id,
+          roleCode: roles.code,
         })
-        .where(eq(users.id, applicantId));
-    } else {
-      const existingByNik = await db
-        .select()
         .from(users)
-        .where(eq(users.nik, input.nik.trim()))
+        .innerJoin(roles, eq(users.roleId, roles.id))
+        .where(eq(users.id, applicantId))
         .limit(1);
+      const isStaffActor =
+        authRows.length > 0 && authRows[0].roleCode !== 'citizen';
 
+      if (existingByNik.length > 0 && existingByNik[0].id !== applicantId) {
+        if (isStaffActor) {
+          // Staff testing/inputting for an existing citizen NIK: link to citizen record
+          applicantId = existingByNik[0].id;
+          await db
+            .update(users)
+            .set({
+              name: input.name.trim(),
+              phone: input.phone.trim(),
+              email: input.email.trim(),
+            })
+            .where(eq(users.id, applicantId));
+        } else {
+          // Citizen account submitting with a NIK already attached to another record: avoid unique crash
+          await db
+            .update(users)
+            .set({
+              name: input.name.trim(),
+              phone: input.phone.trim(),
+            })
+            .where(eq(users.id, applicantId));
+        }
+      } else if (isStaffActor && existingByNik.length === 0) {
+        // Staff submitting on behalf of a new citizen NIK: create citizen record without overwriting staff profile
+        const citizenRole = await db
+          .select()
+          .from(roles)
+          .where(eq(roles.code, 'citizen'))
+          .limit(1);
+        const insertedCitizen = await db
+          .insert(users)
+          .values({
+            name: input.name.trim(),
+            nik: cleanNik,
+            phone: input.phone.trim(),
+            email: input.email.trim(),
+            roleId: citizenRole[0]?.id ?? 1,
+          })
+          .returning();
+        applicantId = insertedCitizen[0].id;
+      } else {
+        await db
+          .update(users)
+          .set({
+            name: input.name.trim(),
+            phone: input.phone.trim(),
+            nik: cleanNik,
+          })
+          .where(eq(users.id, applicantId));
+      }
+    } else {
       if (existingByNik.length > 0) {
         applicantId = existingByNik[0].id;
         await db
@@ -354,7 +409,7 @@ export async function createComplaintSubmission(input: {
           .insert(users)
           .values({
             name: input.name.trim(),
-            nik: input.nik.trim(),
+            nik: cleanNik,
             phone: input.phone.trim(),
             email: input.email.trim(),
             roleId: citizenRole[0]?.id ?? 1,
@@ -594,7 +649,7 @@ export async function getAdminComplaints(filters?: {
         applicantEmail: users.email,
       })
       .from(complaints)
-      .innerJoin(users, eq(complaints.userId, users.id))
+      .leftJoin(users, eq(complaints.userId, users.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(complaints.createdAt));
 
@@ -610,12 +665,14 @@ export async function getAdminComplaints(filters?: {
             verifierName: users.name,
           })
           .from(verifications)
-          .innerJoin(users, eq(verifications.adminId, users.id))
+          .leftJoin(users, eq(verifications.adminId, users.id))
           .where(eq(verifications.complaintId, row.id))
           .orderBy(desc(verifications.timestamp));
 
         return {
           ...row,
+          applicantName: row.applicantName || 'Pemohon SIPPANDU',
+          applicantEmail: row.applicantEmail || '-',
           latestVerification: history[0] ?? null,
           verifications: history,
         };
