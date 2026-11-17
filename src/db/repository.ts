@@ -468,7 +468,9 @@ export async function trackComplaintsPublic(query: string) {
       .innerJoin(users, eq(complaints.userId, users.id))
       .where(
         or(
-          ilike(complaints.ticketNumber, clean),
+          clean.length >= 6
+            ? ilike(complaints.ticketNumber, `%${clean}%`)
+            : ilike(complaints.ticketNumber, clean),
           eq(users.nik, clean)
         )
       )
@@ -487,7 +489,7 @@ export async function trackComplaintsPublic(query: string) {
             verifierName: users.name,
           })
           .from(verifications)
-          .innerJoin(users, eq(verifications.adminId, users.id))
+          .leftJoin(users, eq(verifications.adminId, users.id))
           .where(eq(verifications.complaintId, item.id))
           .orderBy(desc(verifications.timestamp));
 

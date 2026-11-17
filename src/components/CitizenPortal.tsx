@@ -22,6 +22,7 @@ export function CitizenPortal({ onOpenAsnPortal }: CitizenPortalProps) {
   const { dbUser, idToken, authFetch, getFreshToken } = useAuth();
   const [services, setServices] = useState<ServiceType[]>([]);
   const [servicesLoading, setServicesLoading] = useState(true);
+  const [servicesError, setServicesError] = useState<string | null>(null);
   const [heroImgFailed, setHeroImgFailed] = useState(false);
 
   // Tracking state
@@ -50,27 +51,37 @@ export function CitizenPortal({ onOpenAsnPortal }: CitizenPortalProps) {
   const [myComplaints, setMyComplaints] = useState<any[]>([]);
   const [loadingMine, setLoadingMine] = useState(false);
 
+  const loadServices = async (attempt = 0) => {
+    if (attempt === 0) {
+      setServicesLoading(true);
+      setServicesError(null);
+    }
+    try {
+      const res = await fetch('/api/services');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Gagal memuat daftar layanan kependudukan.');
+      }
+      const list: ServiceType[] = Array.isArray(data.services) ? data.services : [];
+      setServices(list);
+      setServicesError(null);
+      if (list.length > 0) {
+        setServiceType((prev) => prev || list[0].name);
+      }
+      setServicesLoading(false);
+    } catch (err: any) {
+      if (attempt < 2) {
+        setTimeout(() => loadServices(attempt + 1), 1500 * (attempt + 1));
+        return;
+      }
+      setServices([]);
+      setServicesError(err?.message || 'Gagal memuat daftar layanan kependudukan.');
+      setServicesLoading(false);
+    }
+  };
+
   useEffect(() => {
-    let active = true;
-    fetch('/api/services')
-      .then((res) => res.json())
-      .then((data) => {
-        if (!active) return;
-        const list: ServiceType[] = data.services || [];
-        setServices(list);
-        if (list.length > 0) {
-          setServiceType((prev) => prev || list[0].name);
-        }
-      })
-      .catch(() => {
-        if (active) setServices([]);
-      })
-      .finally(() => {
-        if (active) setServicesLoading(false);
-      });
-    return () => {
-      active = false;
-    };
+    loadServices(0);
   }, []);
 
   useEffect(() => {
@@ -104,32 +115,39 @@ export function CitizenPortal({ onOpenAsnPortal }: CitizenPortalProps) {
     }
   }, [idToken]);
 
-  const runTracking = async (queryOverride?: string) => {
+  const runTracking = async (queryOverride?: string, attempt = 0) => {
     const q = (queryOverride ?? trackQuery).trim();
     if (!q) {
       setTrackError('Masukkan Nomor Tiket atau NIK 16 digit.');
       return;
     }
-    setTrackQuery(q);
-    setTrackLoading(true);
-    setTrackError(null);
+    if (attempt === 0) {
+      setTrackQuery(q);
+      setTrackLoading(true);
+      setTrackError(null);
+    }
     try {
       const res = await fetch(`/api/public/track?q=${encodeURIComponent(q)}`);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error || 'Gagal mencari tiket.');
       }
-      setTrackResults(data.results || []);
+      setTrackResults(Array.isArray(data.results) ? data.results : []);
+      setTrackError(null);
+      setTrackLoading(false);
     } catch (err: any) {
+      if (attempt < 2) {
+        setTimeout(() => runTracking(q, attempt + 1), 1500 * (attempt + 1));
+        return;
+      }
       setTrackError(err.message || 'Terjadi kesalahan saat melacak tiket.');
       setTrackResults(null);
-    } finally {
       setTrackLoading(false);
     }
   };
 
   useEffect(() => {
-    runTracking('SDK-202611-0001');
+    runTracking('SDK-202611-0001', 0);
   }, []);
 
   const selectedServiceMeta = services.find((s) => s.name === serviceType);
@@ -276,29 +294,57 @@ export function CitizenPortal({ onOpenAsnPortal }: CitizenPortalProps) {
         </div>
 
         {/* 4-Column Service SLA Strip */}
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {(servicesLoading ? [] : services.slice(0, 4)).map((srv, idx) => (
+        {servicesLoading ? (
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((slot) => (
+              <div
+                key={slot}
+                className="bg-white border border-slate-200 rounded-xl p-4 space-y-2 animate-pulse"
+              >
+                <div className="h-3 w-24 bg-slate-200 rounded" />
+                <div className="h-4 w-40 bg-slate-200 rounded" />
+                <div className="h-3 w-full bg-slate-100 rounded" />
+              </div>
+            ))}
+          </div>
+        ) : servicesError ? (
+          <div className="mt-8 bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <p className="text-xs text-amber-900">
+              {servicesError} Pastikan koneksi database aktif lalu muat ulang daftar layanan.
+            </p>
             <button
-              key={srv.id}
               type="button"
-              onClick={() => {
-                setServiceType(srv.name);
-                document.getElementById('pengajuan')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="text-left bg-white border border-slate-200 hover:border-[#0F294A] rounded-xl p-4 transition-colors cursor-pointer"
+              onClick={() => loadServices(0)}
+              className="px-3 py-1.5 text-xs font-medium text-amber-950 bg-amber-200 hover:bg-amber-300 rounded-md cursor-pointer whitespace-nowrap shrink-0"
             >
-              <div className="text-xs font-mono text-slate-500 tabular-nums">
-                0{idx + 1} · SLA {srv.slaDays} Hari Kerja
-              </div>
-              <div className="mt-1.5 font-display font-semibold text-sm text-slate-900">
-                {srv.name}
-              </div>
-              <p className="mt-1 text-xs text-slate-500 line-clamp-2">
-                {srv.requiredDocs}
-              </p>
+              Muat Ulang Layanan
             </button>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {services.slice(0, 4).map((srv, idx) => (
+              <button
+                key={srv.id}
+                type="button"
+                onClick={() => {
+                  setServiceType(srv.name);
+                  document.getElementById('pengajuan')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="text-left bg-white border border-slate-200 hover:border-[#0F294A] rounded-xl p-4 transition-colors cursor-pointer"
+              >
+                <div className="text-xs font-mono text-slate-500 tabular-nums">
+                  0{idx + 1} · SLA {srv.slaDays} Hari Kerja
+                </div>
+                <div className="mt-1.5 font-display font-semibold text-sm text-slate-900">
+                  {srv.name}
+                </div>
+                <p className="mt-1 text-xs text-slate-500 line-clamp-2">
+                  {srv.requiredDocs}
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Self-Service Tracking Section */}
@@ -362,8 +408,21 @@ export function CitizenPortal({ onOpenAsnPortal }: CitizenPortalProps) {
           </div>
 
           {trackError && (
-            <div className="mt-5 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-800">
-              {trackError}
+            <div className="mt-5 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <span>{trackError}</span>
+              <button
+                type="button"
+                onClick={() => runTracking(trackQuery, 0)}
+                className="px-3 py-1.5 text-xs font-medium text-red-900 bg-red-100 hover:bg-red-200 rounded-md cursor-pointer whitespace-nowrap shrink-0"
+              >
+                Coba Lagi
+              </button>
+            </div>
+          )}
+
+          {trackLoading && (
+            <div className="mt-6 p-6 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-600">
+              Memuat status tiket dan riwayat verifikasi dari server...
             </div>
           )}
 
@@ -640,20 +699,38 @@ export function CitizenPortal({ onOpenAsnPortal }: CitizenPortalProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                  Jenis Layanan / Pengaduan Kependudukan *
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <label className="block text-xs font-medium text-slate-700">
+                    Jenis Layanan / Pengaduan Kependudukan *
+                  </label>
+                  {servicesError && (
+                    <button
+                      type="button"
+                      onClick={() => loadServices(0)}
+                      className="text-xs font-medium text-[#0F294A] hover:underline cursor-pointer"
+                    >
+                      Muat Ulang Daftar
+                    </button>
+                  )}
+                </div>
                 <select
                   required
+                  disabled={servicesLoading || services.length === 0}
                   value={serviceType}
                   onChange={(e) => setServiceType(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F294A] focus:bg-white"
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F294A] focus:bg-white disabled:opacity-70"
                 >
-                  {services.map((srv) => (
-                    <option key={srv.id} value={srv.name}>
-                      {srv.name} (SLA {srv.slaDays} Hari)
-                    </option>
-                  ))}
+                  {servicesLoading ? (
+                    <option value="">Memuat daftar layanan kependudukan...</option>
+                  ) : services.length === 0 ? (
+                    <option value="">Daftar layanan belum tersedia — klik Muat Ulang</option>
+                  ) : (
+                    services.map((srv) => (
+                      <option key={srv.id} value={srv.name}>
+                        {srv.name} (SLA {srv.slaDays} Hari)
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 

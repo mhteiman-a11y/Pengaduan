@@ -4,7 +4,7 @@ import path from 'path';
 import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 import {
-  AuthRequest,
+  type AuthRequest,
   optionalAuth,
   requireAuth,
   requireFeature,
