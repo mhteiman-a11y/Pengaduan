@@ -1,0 +1,6 @@
+{
+  "name": "SIPPANDU DUKCAPIL Sidoarjo",
+  "description": "Sistem Informasi Pelayanan Pengaduan & Permohonan Data Kependudukan Kabupaten Sidoarjo dengan pelacakan tiket real-time, verifikasi ASN, notifikasi otomatis, dan pelaporan berkala.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
