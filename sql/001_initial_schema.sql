@@ -46,6 +46,17 @@ CREATE TABLE IF NOT EXISTS complaints (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS complaint_attachments (
+  id SERIAL PRIMARY KEY,
+  complaint_id INTEGER NOT NULL UNIQUE REFERENCES complaints(id) ON DELETE CASCADE,
+  storage_key TEXT NOT NULL UNIQUE,
+  original_name TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  content_base64 TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS verifications (
   id SERIAL PRIMARY KEY,
   complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,

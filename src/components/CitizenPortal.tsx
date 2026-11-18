@@ -788,24 +788,52 @@ export function CitizenPortal() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                  Unggah Berkas Pendukung (PDF, JPG, PNG · Maks. 5 MB)
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <label className="block text-xs font-medium text-slate-700">
+                    Unggah Berkas Pendukung (PDF, JPG, PNG, WEBP · Maks. 5 MB)
+                  </label>
+                  {file && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      className="text-xs font-medium text-red-700 hover:underline cursor-pointer"
+                    >
+                      Hapus File
+                    </button>
+                  )}
+                </div>
                 <label className="flex items-center justify-between gap-4 px-4 py-3.5 border border-dashed border-slate-300 hover:border-[#0F294A] rounded-lg bg-slate-50 cursor-pointer transition-colors">
                   <div className="flex items-center gap-3 min-w-0">
                     <FileUp className="w-5 h-5 text-[#0F294A] shrink-0" />
                     <span className="text-sm text-slate-700 truncate">
-                      {file ? file.name : 'Pilih berkas scan KK / KTP / Surat Pengantar...'}
+                      {file
+                        ? `${file.name} (${file.size >= 1024 * 1024 ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`})`
+                        : 'Pilih berkas scan KK / KTP / Surat Pengantar...'}
                     </span>
                   </div>
                   <span className="text-xs font-medium text-[#0F294A] whitespace-nowrap shrink-0">
-                    Pilih File
+                    {file ? 'Ganti File' : 'Pilih File'}
                   </span>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                    onChange={(e) => {
+                      const picked = e.target.files?.[0] ?? null;
+                      if (picked && picked.size > 5 * 1024 * 1024) {
+                        setSubmitError(
+                          `Ukuran berkas "${picked.name}" melebihi batas maksimal 5 MB. Silakan kompres atau pilih file lain.`
+                        );
+                        e.target.value = '';
+                        setFile(null);
+                        return;
+                      }
+                      setSubmitError(null);
+                      setFile(picked);
+                    }}
                     className="hidden"
                   />
                 </label>

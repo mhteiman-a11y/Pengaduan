@@ -1,6 +1,7 @@
 import { db } from '../db/index.ts';
 import {
   auditLogs,
+  complaintAttachments,
   complaints,
   notifications,
   roles,
@@ -382,6 +383,13 @@ export async function createComplaintSubmission(input: {
   description: string;
   filePath?: string | null;
   fileOriginalName?: string | null;
+  attachment?: {
+    storageKey: string;
+    originalName: string;
+    mimeType: string;
+    sizeBytes: number;
+    contentBase64: string;
+  } | null;
 }) {
   try {
     await ensureBaseRoles();
@@ -533,6 +541,17 @@ export async function createComplaintSubmission(input: {
 
     const complaint = insertedComplaint[0];
 
+    if (input.attachment) {
+      await db.insert(complaintAttachments).values({
+        complaintId: complaint.id,
+        storageKey: input.attachment.storageKey,
+        originalName: input.attachment.originalName,
+        mimeType: input.attachment.mimeType,
+        sizeBytes: input.attachment.sizeBytes,
+        contentBase64: input.attachment.contentBase64,
+      });
+    }
+
     const waMessage = `[SIPPANDU DUKCAPIL SIDOARJO] Permohonan layanan "${complaint.serviceType}" telah diterima dengan Nomor Tiket ${complaint.ticketNumber}. Status saat ini: MENUNGGU VERIFIKASI.`;
     const emailMessage = `Yth. ${input.name.trim()}, permohonan/pengaduan Anda untuk layanan ${complaint.serviceType} telah tercatat pada sistem SIPPANDU DUKCAPIL Kabupaten Sidoarjo dengan nomor tiket ${complaint.ticketNumber}.`;
 
@@ -571,6 +590,20 @@ export async function createComplaintSubmission(input: {
   } catch (error) {
     console.error('Database query failed in createComplaintSubmission:', error);
     throw new Error('Gagal menyimpan permohonan kependudukan.', { cause: error });
+  }
+}
+
+export async function getComplaintAttachmentByStorageKey(storageKey: string) {
+  try {
+    const rows = await db
+      .select()
+      .from(complaintAttachments)
+      .where(eq(complaintAttachments.storageKey, storageKey))
+      .limit(1);
+    return rows[0] ?? null;
+  } catch (error) {
+    console.error('Database query failed in getComplaintAttachmentByStorageKey:', error);
+    throw new Error('Gagal mengambil berkas lampiran dari database.', { cause: error });
   }
 }
 

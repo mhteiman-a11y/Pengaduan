@@ -63,6 +63,21 @@ export const complaints = pgTable('complaints', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// 4b. Persistent Complaint File Attachments (Stored in PostgreSQL so files survive restarts)
+export const complaintAttachments = pgTable('complaint_attachments', {
+  id: serial('id').primaryKey(),
+  complaintId: integer('complaint_id')
+    .references(() => complaints.id, { onDelete: 'cascade' })
+    .notNull()
+    .unique(),
+  storageKey: text('storage_key').notNull().unique(),
+  originalName: text('original_name').notNull(),
+  mimeType: text('mime_type').notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  contentBase64: text('content_base64').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // 5. Verifications Table (ASN Decisions, Rejections & Booking Dates)
 export const verifications = pgTable('verifications', {
   id: serial('id').primaryKey(),
@@ -126,9 +141,23 @@ export const complaintsRelations = relations(complaints, ({ one, many }) => ({
     fields: [complaints.userId],
     references: [users.id],
   }),
+  attachment: one(complaintAttachments, {
+    fields: [complaints.id],
+    references: [complaintAttachments.complaintId],
+  }),
   verifications: many(verifications),
   notifications: many(notifications),
 }));
+
+export const complaintAttachmentsRelations = relations(
+  complaintAttachments,
+  ({ one }) => ({
+    complaint: one(complaints, {
+      fields: [complaintAttachments.complaintId],
+      references: [complaints.id],
+    }),
+  })
+);
 
 export const verificationsRelations = relations(verifications, ({ one }) => ({
   complaint: one(complaints, {

@@ -18,6 +18,7 @@ import {
   getAllServiceTypes,
   getAllUsersWithRoles,
   getAuditLogHistory,
+  getComplaintAttachmentByStorageKey,
   getComplaintsForUser,
   getNotificationHistory,
   getPublicServiceTypes,
@@ -36,27 +37,30 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const safeName = `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`;
-    cb(null, safeName);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
   fileFilter: (_req, file, cb) => {
-    const allowed = ['.pdf', '.jpg', '.jpeg', '.png'];
+    const allowedExt = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
+    const allowedMime = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
     const ext = path.extname(file.originalname).toLowerCase();
-    if (!allowed.includes(ext)) {
-      return cb(new Error('Format berkas harus PDF, JPG, JPEG, atau PNG.'));
+    if (!allowedExt.includes(ext) && !allowedMime.includes(file.mimetype)) {
+      return cb(new Error('Format berkas harus PDF, JPG, JPEG, PNG, atau WEBP.'));
     }
     cb(null, true);
   },
 });
+
+function inferAttachmentMimeType(filename: string, providedMime?: string): string {
+  if (providedMime && providedMime !== 'application/octet-stream') {
+    return providedMime;
+  }
+  const ext = path.extname(filename).toLowerCase();
+  if (ext === '.pdf') return 'application/pdf';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  return 'image/jpeg';
+}
 
 app.use(express.json({ limit: '2mb' }));
 
@@ -123,8 +127,31 @@ app.post(
         });
       }
 
-      const filePath = req.file ? `/api/uploads/${req.file.filename}` : null;
-      const fileOriginalName = req.file ? req.file.originalname : null;
+      let filePath: string | null = null;
+      let fileOriginalName: string | null = null;
+      let attachment: {
+        storageKey: string;
+        originalName: string;
+        mimeType: string;
+        sizeBytes: number;
+        contentBase64: string;
+      } | null = null;
+
+      if (req.file) {
+        const ext = path.extname(req.file.originalname).toLowerCase() || (
+          req.file.mimetype === 'application/pdf' ? '.pdf' : '.jpg'
+        );
+        const storageKey = `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`;
+        filePath = `/api/uploads/${storageKey}`;
+        fileOriginalName = req.file.originalname;
+        attachment = {
+          storageKey,
+          originalName: req.file.originalname,
+          mimeType: inferAttachmentMimeType(req.file.originalname, req.file.mimetype),
+          sizeBytes: req.file.size,
+          contentBase64: req.file.buffer.toString('base64'),
+        };
+      }
 
       const created = await createComplaintSubmission({
         authUserId: req.dbUser?.id,
@@ -136,6 +163,7 @@ app.post(
         description: String(description),
         filePath,
         fileOriginalName,
+        attachment,
       });
 
       res.status(201).json({ complaint: created });
@@ -165,19 +193,50 @@ app.get(
   '/api/uploads/:filename',
   requireAuth,
   requireFeature('portal_asn_queue'),
-  (req, res) => {
-    const safeFile = path.basename(req.params.filename);
-    const fullPath = path.join(uploadDir, safeFile);
-    if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ error: 'Berkas lampiran tidak ditemukan di server.' });
+  async (req, res) => {
+    try {
+      const safeFile = path.basename(req.params.filename);
+      const requestedName = req.query.name
+        ? path.basename(String(req.query.name))
+        : safeFile;
+      const isDownload = req.query.download === '1';
+
+      const dbAttachment = await getComplaintAttachmentByStorageKey(safeFile);
+      if (dbAttachment) {
+        const buffer = Buffer.from(dbAttachment.contentBase64, 'base64');
+        const mime = inferAttachmentMimeType(
+          dbAttachment.originalName || safeFile,
+          dbAttachment.mimeType
+        );
+        const dispName = (req.query.name ? requestedName : dbAttachment.originalName || safeFile).replace(/"/g, '');
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Content-Type', mime);
+        res.setHeader('Content-Length', String(buffer.length));
+        res.setHeader(
+          'Content-Disposition',
+          `${isDownload ? 'attachment' : 'inline'}; filename="${encodeURIComponent(dispName)}"`
+        );
+        return res.send(buffer);
+      }
+
+      const fullPath = path.join(uploadDir, safeFile);
+      if (fs.existsSync(fullPath)) {
+        res.setHeader('Cache-Control', 'no-store');
+        if (isDownload) {
+          return res.download(fullPath, requestedName);
+        }
+        return res.sendFile(fullPath);
+      }
+
+      return res.status(404).json({
+        error:
+          'Berkas lampiran tidak ditemukan di server. Jika pengajuan ini dikirim sebelum pembaruan penyimpanan database permanen, file sementara pada container sebelumnya telah terhapus saat server restart.',
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        error: error.message || 'Gagal memuat berkas lampiran.',
+      });
     }
-    const requestedName = req.query.name
-      ? path.basename(String(req.query.name))
-      : safeFile;
-    if (req.query.download === '1') {
-      return res.download(fullPath, requestedName);
-    }
-    res.sendFile(fullPath);
   }
 );
 
